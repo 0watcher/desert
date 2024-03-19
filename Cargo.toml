@@ -3,9 +3,11 @@ name = "desert"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+proc-macro = true
 
 [dependencies]
+proc-macro2 = "1.0.79"
+quote = "1.0.35"
 rusqlite = "0.31.0"
-serde = "1.0.197"
-serde_derive = "1.0.197"
+syn = "2.0.53"

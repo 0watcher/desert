@@ -1,7 +1,8 @@
 use std::path::Path;
 
 use rusqlite::{Connection, Result};
-use serde::{Deserialize, Serialize};
+
+use crate::{Deserialize, Serialize};
 
 pub enum SelectOpt {
     All,
@@ -14,7 +15,7 @@ pub enum UpdateOpt {
     Where(String),
 }
 
-struct Db {
+pub struct Db {
     conn: Connection,
 }
 
@@ -29,7 +30,7 @@ impl Db {
         Ok(Db { conn })
     }
 
-    pub fn create(&mut self) {}
+    pub fn create<T: Serialize>(&mut self) {}
 
     pub fn select<T: Serialize>(&mut self) {}
 
