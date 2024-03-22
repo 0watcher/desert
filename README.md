@@ -10,10 +10,17 @@
 struct Person {
     name: String,
     email: String,
+    favourite_animal: String
 }
 
-Db::mem().insert_one(Person{
+let db = Db::mem();
+let tb = Table::new(&db, "persons");
+
+tb.insert_one(Person{
     name: "somename",
-    email: "somemail@mail.com"
+    email: "somemail@mail.com",
+    favourite_animal: "dog"
 });
+
+let result = tb.select(["name"], SQL::Distinct + SQL::Where("favourite_animal = 'dog'"));
 ```

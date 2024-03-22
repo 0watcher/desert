@@ -1,14 +1,51 @@
-use std::path::Path;
+use std::{collections::HashMap, marker::PhantomData, ops::Add, path::Path};
 
 use rusqlite::{Connection, Result};
+use serde::{Deserialize, Serialize};
 
-use crate::{Deserialize, Serialize};
-
-pub enum SelectOpt {
+pub enum SelectOpt<'a> {
     All,
     Distinct,
-    Where(String),
+    Where(&'a str),
     OrderBy(bool),
+}
+
+impl<'a> Add<SelectOpt<'a>> for SelectOpt<'a> {
+    type Output = OptVec<SelectOpt<'a>>;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        OptVec(vec![self, rhs])
+    }
+}
+
+impl<'a> Add<OptVec<SelectOpt<'a>>> for SelectOpt<'a> {
+    type Output = OptVec<SelectOpt<'a>>;
+
+    fn add(self, rhs: OptVec<SelectOpt<'a>>) -> Self::Output {
+        let mut v = vec![self];
+        v.extend(rhs.0);
+        OptVec(v)
+    }
+}
+
+struct OptVec<T>(pub Vec<T>);
+
+impl<'a> Add<SelectOpt<'a>> for OptVec<SelectOpt<'a>> {
+    type Output = OptVec<SelectOpt<'a>>;
+
+    fn add(mut self, rhs: SelectOpt) -> Self::Output {
+        self.0.push(rhs);
+        self
+    }
+}
+
+impl<'a> Add<OptVec<SelectOpt<'a>>> for OptVec<SelectOpt<'a>> {
+    type Output = OptVec<SelectOpt<'a>>;
+
+    fn add(mut self, rhs: OptVec<SelectOpt<'a>>) -> Self::Output {
+        self.0.extend(rhs.0);
+        self
+    }
 }
 
 pub enum UpdateOpt {
@@ -30,21 +67,40 @@ impl Db {
         Ok(Db { conn })
     }
 
-    pub fn create<T: Serialize>(&mut self) {}
+    pub(crate) fn get(&mut self) -> &Connection {
+        &self.conn
+    }
+}
 
-    pub fn select<T: Serialize>(&mut self) {}
+pub struct Table<'a, T> {
+    pub(crate) db: &'a Db,
+    table_name: &'a str,
+    _marker: PhantomData<T>,
+}
 
-    pub fn insert_one<'a, T: Deserialize<'a>>(&mut self) {}
+impl<'a, T> Table<'a, T> {
+    pub fn new(table_name: &str) {}
+    pub fn set_db(db: &Db) {}
 
-    pub fn insert_many<'a, T: Deserialize<'a>>(&mut self) {}
+    pub fn select<S>(&mut self, what: S, options: Vec<SelectOpt>) -> Result<T, rusqlite::Error> {
+        let conn = self.db.get();
+        conn.prepare("SELECT");
+    }
 
-    pub fn update_one<'a, T: Deserialize<'a>>(&mut self) {}
+    pub fn insert_one(&mut self, object: &T) -> Result<(), rusqlite::Error> {}
 
-    pub fn update_many<'a, T: Deserialize<'a>>(&mut self) {}
+    pub fn insert_many(&mut self, objects: &[T]) -> Result<(), rusqlite::Error> {}
 
-    pub fn delete_one<'a, T: Deserialize<'a>>(&mut self) {}
+    pub fn update_one(&mut self, object: &mut T) -> Result<(), rusqlite::Error> {}
 
-    pub fn delete_many<'a, T: Deserialize<'a>>(&mut self) {}
+    pub fn update_many(&mut self, objects: &[T]) -> Result<(), rusqlite::Error> {}
 
-    pub fn count_rows<T: Serialize>(&mut self) {}
+    pub fn delete_one(&mut self, object: T) -> Result<(), rusqlite::Error> {}
+
+    pub fn delete_many(&mut self, objects: &[T]) -> Result<(), rusqlite::Error> {}
+
+    pub fn count_rows(&mut self) -> Result<u32, rusqlite::Error> {}
+}
+
+fn tokenize_json<'a, T: Serialize>(json_text: T) -> HashMap<&'a str, &'a str> {
 }
