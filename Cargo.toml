@@ -4,7 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rusqlite = "0.31.0"
 serde = "1.0.197"
 serde_derive = "1.0.197"
 serde_json = "1.0.114"
+
+[dependencies.rusqlite]
+version = "0.31.0"
+features = ["bundled"]

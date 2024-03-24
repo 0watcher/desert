@@ -1,20 +1,21 @@
 # 🏜️ desert
- Simple serde wrapper for rusqlite, that prevent you among others from harcoding queries. It isn't complete because I'am not handling all possible query cases available in SQL.
+ Simple async schemaless wrapper for rusqlite, that prevent you among others from hardcoding queries. It isn't complete because I'am not handling all possible features available in SQLite.
 
-# Cargo Add
-```cargo add desert``` 
+## Cargo Add
+```
+cargo add desert && cargo add serde_derive && cargo add tokio
+``` 
 
-# Example
+## Example
 ```rust
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize, Debug)]
 struct Person {
     name: String,
     email: String,
     favourite_animal: String
 }
 
-let db = Db::mem();
-let tb = Table::new(&db, "persons");
+let tb = Db::mem().table<Person>("persons");
 
 tb.insert_one(Person{
     name: "somename",
@@ -22,5 +23,7 @@ tb.insert_one(Person{
     favourite_animal: "dog"
 });
 
-let result = tb.select(["name"], SQL::Distinct + SQL::Where("favourite_animal = 'dog'"));
+let result = tb.select(SQL::Distinct + SQL::Where("favourite_animal = dog")).await?;
+
+println!("{:?}", result.unwrap()[0]);
 ```
