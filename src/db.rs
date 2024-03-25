@@ -1,10 +1,12 @@
 use core::panic;
 use std::{marker::PhantomData, ops::Add, path::Path};
 
-use rusqlite::{params, Connection, Result};
+use rusqlite::{Connection, Result};
 use serde::{Deserialize, Serialize};
+use serde_rusqlite::*;
 
 pub enum Sql<'a> {
+    AutoIncrement,
     Distinct,
     Where(&'a str),
     OrderBy(bool),
@@ -63,32 +65,34 @@ impl Db {
         Ok(Db { conn })
     }
 
-    pub fn table<V: Serialize>(&mut self, table_name: &str) {
-        Table {
-            db: &self,
-            table_name: table_name,
-            _marker: PhantomData::<V>,
-        };
+    pub fn table<'a, V: Serialize + Deserialize<'a> + Default>(&'a mut self, table_name: &'a str) {
+        Table::<V>::new(table_name, self);
     }
 }
 
-pub struct Table<'a, T: Serialize> {
-    pub(crate) db: &'a Db,
+pub struct Table<'a, T: Serialize + Deserialize<'a> + Default> {
+    pub(crate) conn: &'a Connection,
     table_name: &'a str,
     _marker: PhantomData<T>,
 }
 
-impl<'a, T: Serialize + Deserialize<'a>> Table<'a, T> {
-    pub fn new<V: Serialize>(table_name: &str, db: &Db) {
-        Table {
-            db: db,
+impl<'a, T: Serialize + Deserialize<'a> + Default> Table<'a, T> {
+    pub fn new(table_name: &'a str, db: &'a Db) -> Self {
+        let mut tb = Table {
+            conn: &db.conn,
             table_name: table_name,
-            _marker: PhantomData::<V>,
+            _marker: PhantomData::<T>,
         };
+
+        let query = format!("CREATE TABLE IF NOT EXIST {} (?2)", table_name);
+        db.conn
+            .execute(&query, to_params(tb.serialize_fields()).unwrap());
+
+        tb
     }
 
     pub fn set_db(&mut self, db: &'a Db) {
-        self.db = &db;
+        self.conn = &db.conn;
     }
 
     // pub fn select<V: Deserialize<'a>>(
@@ -117,34 +121,25 @@ impl<'a, T: Serialize + Deserialize<'a>> Table<'a, T> {
     // }
 
     pub fn insert_one(&mut self, object: &T) -> Result<(), rusqlite::Error> {
-        let conn = &self.db.conn;
-
-        conn.execute(
-            "INSERT INTO ?1 VALUES (?2)",
-            (self.table_name, serde_json::to_string(&object).unwrap()),
-        )?;
+        let query = format!("INSERT INTO {} VALUES (?2)", self.table_name);
+        self.conn.execute(&query, to_params(&object).unwrap())?;
 
         Ok(())
     }
 
     pub fn insert_many(&mut self, objects: &[T]) -> Result<(), rusqlite::Error> {
-        let conn = &self.db.conn;
-
+        let query = format!("INSERT INTO {} VALUES (?2)", self.table_name);
         objects.iter().try_for_each(|object| {
-            conn.execute(
-                "INSERT INTO ?1 VALUES ?2",
-                (self.table_name, serde_json::to_string(&object).unwrap()),
-            )
-            .map(|_| ())
+            self.conn
+                .execute(&query, to_params(&object).unwrap())
+                .map(|_| ())
         })?;
 
         Ok(())
     }
 
     pub fn update_one(&mut self, object: &mut T, option: Sql) -> Result<(), rusqlite::Error> {
-        let conn = &self.db.conn;
-
-        conn.execute(
+        self.conn.execute(
             "UPDATE ?1 SET ?2 WHERE ?3",
             (
                 self.table_name,
@@ -161,31 +156,28 @@ impl<'a, T: Serialize + Deserialize<'a>> Table<'a, T> {
     }
 
     pub fn update_many(&mut self, objects: &[T], option: Sql) -> Result<(), rusqlite::Error> {
-        let conn = &self.db.conn;
-
         objects.iter().try_for_each(|object| {
-            conn.execute(
-                "UPDATE ?1 SET ?2 WHERE ?3",
-                (
-                    self.table_name,
-                    serde_json::to_string(&object).unwrap(),
-                    if let Sql::Where(condition) = option {
-                        condition
-                    } else {
-                        panic!("Only 'Where' is allowed for update");
-                    },
-                ),
-            )
-            .map(|_| ())
+            self.conn
+                .execute(
+                    "UPDATE ?1 SET ?2 WHERE ?3",
+                    (
+                        self.table_name,
+                        serde_json::to_string(&object).unwrap(),
+                        if let Sql::Where(condition) = option {
+                            condition
+                        } else {
+                            panic!("Only 'Where' is allowed for update");
+                        },
+                    ),
+                )
+                .map(|_| ())
         })?;
 
         Ok(())
     }
 
     pub fn delete_one(&mut self, object: T, option: Sql) -> Result<(), rusqlite::Error> {
-        let conn = &self.db.conn;
-
-        conn.execute(
+        self.conn.execute(
             "DELETE FROM ?1 WHERE ?2",
             (
                 self.table_name,
@@ -202,33 +194,44 @@ impl<'a, T: Serialize + Deserialize<'a>> Table<'a, T> {
     }
 
     pub fn delete_many(&mut self, objects: &[T], option: Sql) -> Result<(), rusqlite::Error> {
-        let conn = &self.db.conn;
-
         objects.iter().try_for_each(|object| {
-            conn.execute(
-                "DELETE FROM ?1 WHERE ?2",
-                (
-                    self.table_name,
-                    serde_json::to_string(&object).unwrap(),
-                    if let Sql::Where(condition) = option {
-                        condition
-                    } else {
-                        panic!("Only 'Where' is allowed for delete!");
-                    },
-                ),
-            )
-            .map(|_| ())
+            self.conn
+                .execute(
+                    "DELETE FROM ?1 WHERE ?2",
+                    (
+                        self.table_name,
+                        serde_json::to_string(&object).unwrap(),
+                        if let Sql::Where(condition) = option {
+                            condition
+                        } else {
+                            panic!("Only 'Where' is allowed for delete!");
+                        },
+                    ),
+                )
+                .map(|_| ())
         })?;
 
         Ok(())
     }
 
     pub fn count_rows(&mut self) -> Result<u32, rusqlite::Error> {
-        let conn = &self.db.conn;
-
-        let count: u32 = conn.query_row("SELECT COUNT(*) FROM table_name", [], |row| row.get(0))?;
+        let count: u32 = self
+            .conn
+            .query_row("SELECT COUNT(*) FROM table_name", [], |row| row.get(0))?;
 
         Ok(count)
+    }
+
+    pub(crate) fn serialize_fields(&mut self) -> Vec<String> {
+        let json = serde_json::to_string(&T::default()).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        parsed
+            .clone()
+            .as_object()
+            .unwrap()
+            .keys()
+            .map(|k| k.to_owned())
+            .collect::<Vec<String>>()
     }
 }
 

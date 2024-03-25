@@ -1,7 +1,7 @@
 # 🏜️ desert
- Simple async schemaless wrapper for rusqlite, that prevent you among others from hardcoding queries. It isn't complete because I'am not handling all possible features available in SQLite.
+A simple async schemaless wrapper for rusqlite that gets rid of, among other things, hardcoding queries. It is not complete because I do not support all possible features available in SQLite.
 
-## Cargo Add
+## Installation
 ```
 cargo add desert && cargo add serde_derive && cargo add tokio
 ``` 
