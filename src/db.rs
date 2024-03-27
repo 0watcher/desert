@@ -1,8 +1,8 @@
 use core::panic;
-use std::{marker::PhantomData, ops::Add, path::Path};
+use std::{fmt::format, marker::PhantomData, ops::Add, path::Path};
 
-use rusqlite::{Connection, Result};
-use serde::{Deserialize, Serialize};
+use rusqlite::{params, Connection, Result};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_rusqlite::*;
 
 pub enum Sql<'a> {
@@ -65,7 +65,7 @@ impl Db {
         Ok(Db { conn })
     }
 
-    pub fn table<'a, V: Serialize + Deserialize<'a> + Default>(&'a mut self, table_name: &'a str) {
+    pub fn table<'a, V: Serialize + DeserializeOwned + Default>(&'a mut self, table_name: &'a str) {
         Table::<V>::new(table_name, self);
     }
 }
@@ -76,7 +76,7 @@ pub struct Table<'a, T: Serialize + Deserialize<'a> + Default> {
     _marker: PhantomData<T>,
 }
 
-impl<'a, T: Serialize + Deserialize<'a> + Default> Table<'a, T> {
+impl<'a, T: Serialize + DeserializeOwned + Default> Table<'a, T> {
     pub fn new(table_name: &'a str, db: &'a Db) -> Self {
         let mut tb = Table {
             conn: &db.conn,
@@ -95,35 +95,43 @@ impl<'a, T: Serialize + Deserialize<'a> + Default> Table<'a, T> {
         self.conn = &db.conn;
     }
 
-    // pub fn select<V: Deserialize<'a>>(
-    //     &mut self,
-    //     options: Vec<Sql>,
-    // ) -> Result<Vec<T>, rusqlite::Error> {
-    //     let conn = &self.db.conn;
-    //
-    //     let mut stmt = conn.prepare(&make_select_query(&self.table_name, options))?;
-    //
-    //     let rows = stmt.query_map([], |row| {
-    //         let json_string: String = row.get(0)?;
-    //         serde_json::from_str(&json_string).unwrap()
-    //     })?;
-    //
-    //     let mut results = Vec::new();
-    //     for row in rows {
-    //         results.push(row?);
-    //     }
-    //
-    //     Ok(results)
-    // }
-    //
-    // pub fn partial_select(&mut self, column_names: &[&str], options: Vec<Sql>) {
-    //     let conn = &self.db.conn;
-    // }
+    pub fn select(&mut self, options: Vec<Sql>) -> Result<Vec<T>, rusqlite::Error> {
+        let mut stmt = self
+            .conn
+            .prepare(&make_select_query(&self.table_name, &[], options))?;
+
+        let mut result = from_rows::<T>(stmt.query([]).unwrap());
+
+        let mut rows = Vec::new();
+        while let el = result.next() {
+            rows.push(el.unwrap().unwrap());
+        }
+
+        Ok(rows)
+    }
+
+    pub fn partial_select(
+        &mut self,
+        column_names: &[&str],
+        options: Vec<Sql>,
+    ) -> Result<Vec<T>, rusqlite::Error> {
+        let mut stmt =
+            self.conn
+                .prepare(&make_select_query(&self.table_name, column_names, options))?;
+
+        let mut result = from_rows::<T>(stmt.query([]).unwrap());
+
+        let mut rows = Vec::new();
+        while let el = result.next() {
+            rows.push(el.unwrap().unwrap());
+        }
+
+        Ok(rows)
+    }
 
     pub fn insert_one(&mut self, object: &T) -> Result<(), rusqlite::Error> {
         let query = format!("INSERT INTO {} VALUES (?2)", self.table_name);
         self.conn.execute(&query, to_params(&object).unwrap())?;
-
         Ok(())
     }
 
@@ -142,10 +150,10 @@ impl<'a, T: Serialize + Deserialize<'a> + Default> Table<'a, T> {
         self.conn.execute(
             "UPDATE ?1 SET ?2 WHERE ?3",
             (
-                self.table_name,
-                serde_json::to_string(&object).unwrap(),
+                params![self.table_name],
+                to_params(&object).unwrap(),
                 if let Sql::Where(condition) = option {
-                    condition
+                    params![&condition]
                 } else {
                     panic!("Only 'Where' is allowed for update!");
                 },
@@ -235,12 +243,25 @@ impl<'a, T: Serialize + Deserialize<'a> + Default> Table<'a, T> {
     }
 }
 
-fn make_select_query(table_name: &str, options: Vec<Sql>) -> String {
+fn make_select_query(table_name: &str, column_names: &[&str], options: Vec<Sql>) -> String {
+    let mut query = String::new();
+    if column_names.is_empty() {
+        query = format!("SELECT * FROM {} ", table_name);
+    } else {
+        query = format!("SELECT () FROM {}", table_name);
+
+        let mut names = String::new();
+        for name in column_names.iter() {
+            names.push_str(name);
+            names.push_str(",");
+        }
+
+        query.insert_str(7, &names);
+    }
+
     let mut is_distinct = false;
     let mut is_ordered = false;
     let mut is_whereable = false;
-
-    let query = format!("SELECT * FROM {} ", table_name);
 
     options.iter().for_each(|option| {
         match option {
