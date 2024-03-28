@@ -13,21 +13,21 @@ pub mod r#async {
     }
 
     impl Db {
-        pub fn open(path: &mut Path) -> Result<Self, rusqlite::Error> {
-            let conn = Connection::open(path)?;
-            Ok(Db { conn })
+        pub fn open(path: &mut Path) -> Self {
+            let conn = Connection::open(path).unwrap();
+            Db { conn }
         }
 
-        pub fn mem() -> Result<Self, rusqlite::Error> {
-            let conn = Connection::open_in_memory()?;
-            Ok(Db { conn })
+        pub fn mem() -> Self {
+            let conn = Connection::open_in_memory().unwrap();
+            Db { conn }
         }
 
         pub fn table<'a, V: Serialize + DeserializeOwned + Default>(
             &'a mut self,
             table_name: &'a str,
-        ) {
-            Table::<V>::new(table_name, self);
+        ) -> Table<'a, V> {
+            Table::<V>::new(table_name, self)
         }
     }
 
@@ -56,7 +56,10 @@ pub mod r#async {
             self.conn = &db.conn;
         }
 
-        pub async fn select(&mut self, options: Vec<Sql<'a>>) -> Result<Vec<T>, rusqlite::Error> {
+        pub async fn select(
+            &mut self,
+            options: OptVec<Sql<'a>>,
+        ) -> Result<Vec<T>, rusqlite::Error> {
             let mut stmt = self
                 .conn
                 .prepare(&make_select_query(&self.table_name, &[], options))?;
@@ -74,7 +77,7 @@ pub mod r#async {
         pub async fn partial_select(
             &mut self,
             column_names: &[&str],
-            options: Vec<Sql<'a>>,
+            options: OptVec<Sql<'a>>,
         ) -> Result<Vec<T>, rusqlite::Error> {
             let mut stmt =
                 self.conn
@@ -182,8 +185,10 @@ pub mod r#async {
     }
 }
 
-mod sync {
+pub mod sync {
     use core::panic;
+    use std::rc::Rc;
+    use std::sync::Arc;
     use std::{fmt::format, marker::PhantomData, ops::Add, path::Path};
 
     use rusqlite::{Connection, Result};
@@ -192,39 +197,44 @@ mod sync {
 
     use crate::*;
 
+    #[derive(Clone)]
     pub struct Db {
-        pub(crate) conn: Connection,
+        pub(crate) conn: Rc<Connection>,
     }
 
     impl Db {
-        pub fn open(path: &mut Path) -> Result<Self, rusqlite::Error> {
-            let conn = Connection::open(path)?;
-            Ok(Db { conn })
+        pub fn open(path: &mut Path) -> Self {
+            let conn = Connection::open(path).unwrap();
+            Db {
+                conn: Rc::new(conn),
+            }
         }
 
-        pub fn mem() -> Result<Self, rusqlite::Error> {
-            let conn = Connection::open_in_memory()?;
-            Ok(Db { conn })
+        pub fn mem() -> Self {
+            let conn = Connection::open_in_memory().unwrap();
+            Db {
+                conn: Rc::new(conn),
+            }
         }
 
         pub fn table<'a, V: Serialize + DeserializeOwned + Default>(
-            &'a mut self,
+            &'a self,
             table_name: &'a str,
-        ) {
-            Table::<V>::new(table_name, self);
+        ) -> Table<'a, V> {
+            Table::<V>::new(table_name, self.clone())
         }
     }
 
     pub struct Table<'a, T: Serialize + Deserialize<'a> + Default> {
-        pub(crate) conn: &'a Connection,
+        pub(crate) conn: Rc<Connection>,
         table_name: &'a str,
         _marker: PhantomData<T>,
     }
 
     impl<'a, T: Serialize + DeserializeOwned + Default> Table<'a, T> {
-        pub fn new(table_name: &'a str, db: &'a Db) -> Self {
+        pub fn new(table_name: &'a str, db: Db) -> Self {
             let mut tb = Table {
-                conn: &db.conn,
+                conn: db.conn,
                 table_name: table_name,
                 _marker: PhantomData::<T>,
             };
@@ -237,10 +247,10 @@ mod sync {
         }
 
         pub fn set_db(&mut self, db: &'a Db) {
-            self.conn = &db.conn;
+            self.conn = db.conn.clone();
         }
 
-        pub fn select(&mut self, options: Vec<Sql>) -> Result<Vec<T>, rusqlite::Error> {
+        pub fn select(&mut self, options: OptVec<Sql>) -> Result<Vec<T>, rusqlite::Error> {
             let mut stmt = self
                 .conn
                 .prepare(&make_select_query(&self.table_name, &[], options))?;
@@ -258,7 +268,7 @@ mod sync {
         pub fn partial_select(
             &mut self,
             column_names: &[&str],
-            options: Vec<Sql>,
+            options: OptVec<Sql>,
         ) -> Result<Vec<T>, rusqlite::Error> {
             let mut stmt =
                 self.conn

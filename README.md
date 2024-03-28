@@ -1,4 +1,8 @@
 # 🏜️ desert
+
+![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)
+![Build Status](https://img.shields.io/badge/work-in-progress-yellow.svg)
+
 A simple wrapper for rusqlite that gets rid off hardcoding queries and adds support for asynchronus operations. It's not complete because doesn't support all possible features available in sqlite.
 
 ## Installation

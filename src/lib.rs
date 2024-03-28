@@ -1,6 +1,7 @@
 pub mod db;
+mod test;
 
-use std::ops::Add;
+use std::ops::{Add, Deref};
 
 pub enum Sql<'a> {
     AutoIncrement,
@@ -29,6 +30,14 @@ impl<'a> Add<OptVec<Sql<'a>>> for Sql<'a> {
 
 pub struct OptVec<T>(pub Vec<T>);
 
+impl<T> Deref for OptVec<T> {
+    type Target = Vec<T>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl<'a> Add<Sql<'a>> for OptVec<Sql<'a>> {
     type Output = OptVec<Sql<'a>>;
 
@@ -47,7 +56,7 @@ impl<'a> Add<OptVec<Sql<'a>>> for OptVec<Sql<'a>> {
     }
 }
 
-fn make_select_query(table_name: &str, column_names: &[&str], options: Vec<Sql>) -> String {
+fn make_select_query(table_name: &str, column_names: &[&str], options: OptVec<Sql>) -> String {
     let mut query = String::new();
     if column_names.is_empty() {
         query = format!("SELECT * FROM {} ", table_name);
