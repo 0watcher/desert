@@ -1,10 +1,10 @@
 #[cfg(test)]
 mod test {
-    use crate::db::sync::*;
-    use crate::Sql;
+    use crate::db::Db;
+    use crate::sql::Sql;
     use serde_derive::{Deserialize, Serialize};
 
-    #[derive(Serialize, Deserialize, Debug, Default)]
+    #[derive(Serialize, Deserialize, Default, PartialEq, Debug)]
     struct Person {
         id: u32,
         name: String,
@@ -16,14 +16,16 @@ mod test {
     fn db_functionality() {
         let mut tb = Db::mem().table::<Person>("persons");
 
-        tb.insert_one(&Person {
+        let person = Person {
             id: 1,
             name: "somename".to_string(),
             email: "somemail@mail.com".to_string(),
             favourite_animal: "dog".to_string(),
-        });
+        };
+
+        tb.insert_one(&person);
 
         let result = tb.select(Sql::Distinct + Sql::Where("favourite_animal = dog"));
-        println!("{:?}", result.unwrap()[0]);
+        assert_eq!(result.unwrap()[0], person)
     }
 }
