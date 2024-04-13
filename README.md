@@ -3,18 +3,18 @@
 ![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)
 ![Status](https://img.shields.io/badge/work-in_progress-yellow.svg)
 
-A simple wrapper for rusqlite that gets rid off hardcoding queries and adds support for asynchronus operations. It's not complete because doesn't support all possible features available in sqlite.
+A simple wrapper for rusqlite with mongodb-like API. It's not complete because doesn't support all possible features available in sqlite.
+I made this before i realized that Diesel crate exists.
 
 ## Installation
 ```
-cargo add desert && cargo add serde_derive && cargo add tokio
+cargo add desert serde_derive
 ``` 
 
 ## Example
 ```rust
-use desert::{Sql, async::Db};
+use desert::{Sql, Db};
 use serde_derive::{Serialize, Deserialize};
-use tokio::*;
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Person {
@@ -24,8 +24,7 @@ struct Person {
     favourite_animal: String
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() {
     let tb = Db::mem().table::<Person>("persons");
 
     tb.insert_one(Person{
@@ -35,7 +34,7 @@ async fn main() -> Result<()> {
         favourite_animal: "dog"
     });
 
-    let result = tb.select(SQL::Distinct + SQL::Where("favourite_animal = dog")).await?;
+    let result = tb.select(SQL::Distinct + SQL::Where("favourite_animal = dog"));
 
     println!("{:?}", result.unwrap()[0]);
 }
