@@ -72,16 +72,15 @@ where
 {
     pub fn new(db: Weak<DbInner>, table_name: &str) -> Self {
         let db_ = db.upgrade().unwrap();
-        let query = format!("CREATE TABLE IF NOT EXIST {} (?2)", table_name);
-        db_.execute(&query, to_params(serialize_fields::<T>()).unwrap());
 
-        let tb = Table {
+        db_.execute(&make_create_query::<T>(&table_name), ())
+            .unwrap();
+
+        Table {
             db: db,
             table_name: table_name.to_owned(),
             _marker: PhantomData::default(),
-        };
-
-        tb
+        }
     }
 
     pub fn insert_one(&mut self, object: &T) -> Result<(), rusqlite::Error> {

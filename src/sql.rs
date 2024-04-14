@@ -1,4 +1,6 @@
+use rusqlite::types::{ToSql, Value as SqliteValue};
 use serde::Serialize;
+use serde_json::Value;
 use std::ops::{Add, Deref};
 
 pub enum Sql<'a> {
@@ -54,6 +56,8 @@ impl<'a> Add<OptVec<Sql<'a>>> for OptVec<Sql<'a>> {
     }
 }
 
+struct QueryBuilder;
+
 pub(crate) fn make_select_query(
     table_name: &str,
     column_names: &[&str],
@@ -106,14 +110,42 @@ pub(crate) fn make_select_query(
     query
 }
 
-pub(crate) fn serialize_fields<V: Serialize + Default>() -> Vec<String> {
-    let json = serde_json::to_string(&V::default()).unwrap();
-    let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+pub(crate) fn serialize_fields<T: Serialize + Default>() -> Vec<(String, &'static str)> {
+    let json = serde_json::to_string(&T::default()).unwrap();
+    let parsed: Value = serde_json::from_str(&json).unwrap();
     parsed
-        .clone()
         .as_object()
         .unwrap()
-        .keys()
-        .map(|k| k.to_owned())
-        .collect::<Vec<String>>()
+        .iter()
+        .map(|(k, v)| {
+            let field_type = match v {
+                Value::Number(n) if n.is_i64() => "INTEGER",
+                Value::Number(_) => "REAL",
+                Value::String(_) => "TEXT",
+                Value::Bool(_) => "BOOLEAN",
+                Value::Array(_) => "BLOB",
+                Value::Object(_) => "TEXT",
+                _ => "UNKNOWN",
+            };
+            (k.to_owned(), field_type)
+        })
+        .collect::<Vec<(String, &'static str)>>()
+}
+
+pub(crate) fn make_create_query<T: Serialize + Default>(table_name: &str) -> String {
+    let fields = serialize_fields::<T>();
+
+    let mut query = format!("CREATE TABLE IF NOT EXISTS {} (", table_name);
+
+    for (name, field_type) in fields {
+        query.push_str(&format!("{} {}, ", name, field_type));
+    }
+
+    // Remove the trailing comma and space
+    query.pop();
+    query.pop();
+
+    query.push_str(")");
+
+    query
 }

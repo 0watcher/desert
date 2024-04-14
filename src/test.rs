@@ -14,7 +14,8 @@ mod test {
 
     #[test]
     fn db_functionality() {
-        let mut tb = Db::mem().table::<Person>("persons");
+        let db = Db::mem();
+        let mut tb = db.table::<Person>("persons");
 
         let person = Person {
             id: 1,
@@ -23,7 +24,7 @@ mod test {
             favourite_animal: "dog".to_string(),
         };
 
-        tb.insert_one(&person);
+        assert!(tb.insert_one(&person).is_ok());
 
         let result = tb.select(Sql::Distinct + Sql::Where("favourite_animal = dog"));
         assert_eq!(result.unwrap()[0], person)
