@@ -132,6 +132,7 @@ pub(crate) fn serialize_fields<T: Serialize + Default>() -> Vec<(String, &'stati
         .collect::<Vec<(String, &'static str)>>()
 }
 
+// can be const
 pub(crate) fn make_create_query<T: Serialize + Default>(table_name: &str) -> String {
     let fields = serialize_fields::<T>();
 
@@ -148,4 +149,11 @@ pub(crate) fn make_create_query<T: Serialize + Default>(table_name: &str) -> Str
     query.push_str(")");
 
     query
+}
+
+pub(crate) fn make_insert_query<T: Serialize + Default>(table_name: &str) -> String {
+    todo!()
+}
+pub(crate) fn make_update_query<T: Serialize + Default>(table_name: &str) -> String {
+    todo!()
 }

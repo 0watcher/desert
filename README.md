@@ -1,7 +1,8 @@
 # 🏜️ desert
 
 ![Version](https://img.shields.io/badge/version-0.0.1-blue.svg)
-![Status](https://img.shields.io/badge/work-in_progress-yellow.svg)
+![Status](https://img.shields.io/badge/build-passing-green.svg)
+![Status](https://img.shields.io/badge/tests-failing-red.svg)
 
 A simple wrapper for rusqlite with mongodb-like API. It's not complete because doesn't support all possible features available in sqlite.
 I made this before i realized that Diesel crate exists.
