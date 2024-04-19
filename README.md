@@ -5,7 +5,7 @@
 ![Status](https://img.shields.io/badge/tests-failing-red.svg)
 
 A simple wrapper for rusqlite with mongodb-like API. It's not complete because doesn't support all possible features available in sqlite.
-I made this before i realized that Diesel crate exists.
+I made this before i realized that Diesel crate exists. It's not finished and no longer maintained.
 
 ## Installation
 ```
